@@ -26,6 +26,8 @@ PRICES = {
     "claude-sonnet-5-5": (2.00, 10.00),
     "gemini-2.5-flash-lite": (0.10, 0.40),
     "gemini-3.8-flash": (0.75, 3.75),
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    "gemini-3.5-flash": (1.50, 9.00),
 }
 
 # 只出現在簡體中文的常見字，用來偵測模型是否沒照「繁體中文」的要求
@@ -38,9 +40,9 @@ SYSTEM_JSON = rag.SYSTEM.replace(
 
 
 def http_json(url, body, headers, timeout=180):
-    req = urllib.request.Request(url, data=json.dumps(body).encode("utf-8"), method="POST",
-                                 headers={"content-type": "application/json", **headers})
+    data = json.dumps(body).encode("utf-8")
     for attempt in range(5):
+        req = urllib.request.Request(url, data=data, method="POST", headers={"content-type": "application/json", **headers})
         try:
             with urllib.request.urlopen(req, timeout=timeout) as r:
                 return json.load(r)
@@ -50,7 +52,14 @@ def http_json(url, body, headers, timeout=180):
                 print(f"    HTTP {e.code}，{wait} 秒後重試", file=sys.stderr)
                 time.sleep(wait)
                 continue
-            raise SystemExit(f"API 錯誤 {e.code}：{e.read().decode('utf-8', 'ignore')[:400]}")
+            raise RuntimeError(f"API 錯誤 {e.code}：{e.read().decode('utf-8', 'ignore')[:300]}")
+        except (urllib.error.URLError, TimeoutError, OSError) as e:      # 連線逾時、網路中斷
+            if attempt < 4:
+                wait = 5 * 2 ** attempt
+                print(f"    連線問題（{e}），{wait} 秒後重試", file=sys.stderr)
+                time.sleep(wait)
+                continue
+            raise RuntimeError(f"連線失敗：{e}")
 
 
 def parse_json_text(text):
@@ -149,18 +158,25 @@ def run(provider, model):
     for q in qs:
         retrieved = rag.retrieve(q["question"], chunks, index)
         t0 = time.time()
+        api_error = None
         if not retrieved:   # 檢索不到：程式直接拒答，不呼叫模型
             resp, fmt_err, errs, retried, i, o = {"answerable": False, "answer": rag.NOT_FOUND, "citations": []}, False, [], False, 0, 0
         else:
-            resp, i, o = gen(model, q["question"], retrieved)
-            fmt_err = resp is None
-            errs = ["輸出不是有效的 JSON"] if fmt_err else rag.validate(resp, retrieved)
-            retried = bool(errs)
-            if errs:
-                resp2, i2, o2 = gen(model, q["question"], retrieved, "\n".join(errs))
-                i, o = i + i2, o + o2
-                resp = resp2 or {"answerable": False, "answer": "", "citations": []}
-                errs = ["輸出不是有效的 JSON"] if resp2 is None else rag.validate(resp, retrieved)
+            api_error = None
+            try:
+                resp, i, o = gen(model, q["question"], retrieved)
+                fmt_err = resp is None
+                errs = ["輸出不是有效的 JSON"] if fmt_err else rag.validate(resp, retrieved)
+                retried = bool(errs)
+                if errs:
+                    resp2, i2, o2 = gen(model, q["question"], retrieved, "\n".join(errs))
+                    i, o = i + i2, o + o2
+                    resp = resp2 or {"answerable": False, "answer": "", "citations": []}
+                    errs = ["輸出不是有效的 JSON"] if resp2 is None else rag.validate(resp, retrieved)
+            except RuntimeError as e:   # 這一題呼叫失敗：記下來，繼續下一題
+                api_error = str(e)
+                print(f"    {q['id']} API 失敗：{api_error[:120]}", file=sys.stderr)
+                resp, fmt_err, errs, retried, i, o = {"answerable": None, "answer": "", "citations": []}, False, [api_error], False, 0, 0
         sec = time.time() - t0
         tin, tout = tin + i, tout + o
         ans = resp.get("answer", "") or ""
@@ -171,7 +187,7 @@ def run(provider, model):
         rows.append({"id": q["id"], "type": "應答" if q.get("expected_chunk") else "拒答", "correct": ok,
                      "answerable": resp.get("answerable"), "answer": ans, "errors": errs, "retried": retried,
                      "format_error": fmt_err, "simplified": bool(SIMPLIFIED & set(ans)), "seconds": round(sec, 2),
-                     "called_model": bool(retrieved)})
+                     "called_model": bool(retrieved), "api_error": api_error})
         print(f"{'✓' if ok else '✗'} {q['id']} {sec:5.1f}s  {ans[:36]}")
 
     ans_rows = [r for r in rows if r["type"] == "應答"]
@@ -187,6 +203,7 @@ def run(provider, model):
         "重試後仍未通過驗證": sum(1 for r in rows if r["errors"]),
         "首次輸出格式錯誤": sum(r["format_error"] for r in rows),
         "使用簡體字": sum(r["simplified"] for r in rows),
+        "API失敗": sum(1 for r in rows if r.get("api_error")),
         "每題秒數中位數": round(statistics.median([r["seconds"] for r in called]), 2) if called else 0,
         "輸入token": tin, "輸出token": tout,
         "費用美元": cost,

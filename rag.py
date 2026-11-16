@@ -127,7 +127,13 @@ def build_context(retrieved):
     return "\n\n".join(f"[{c['id']}]\n{c['text']}" for c in retrieved)
 
 
+NO_FORCED_TOOL = set()   # 已知不支援強制呼叫工具的模型，之後直接用 auto，不再多試一次
+
+
 def call_claude(question, retrieved, model, api_key, feedback=None):
+    """呼叫 Claude，用 tool use 取得固定格式的回答。
+    有些模型不支援「強制呼叫指定工具」（tool_choice type=tool），遇到時自動改成 auto，
+    並在模型沒有呼叫工具時，從文字回答中解析 JSON。"""
     content = f"參考資料：\n{build_context(retrieved)}\n\n問題：{question}"
     if feedback:
         content += f"\n\n上一次的回答有問題，請修正：\n{feedback}"
@@ -135,22 +141,43 @@ def call_claude(question, retrieved, model, api_key, feedback=None):
     schema["properties"]["citations"]["items"]["properties"]["chunk_id"]["enum"] = [c["id"] for c in retrieved]
     body = {"model": model, "max_tokens": 1024, "system": SYSTEM,
             "tools": [{"name": "answer", "description": "回傳答案與引用", "input_schema": schema}],
-            "tool_choice": {"type": "tool", "name": "answer"},
+            "tool_choice": {"type": "auto"} if model in NO_FORCED_TOOL else {"type": "tool", "name": "answer"},
             "messages": [{"role": "user", "content": content}]}
-    req = urllib.request.Request(API_URL, data=json.dumps(body).encode("utf-8"), method="POST", headers={
-        "content-type": "application/json", "x-api-key": api_key, "anthropic-version": "2023-06-01"})
-    for attempt in range(3):
+    resp = None
+    for attempt in range(4):
+        req = urllib.request.Request(API_URL, data=json.dumps(body).encode("utf-8"), method="POST", headers={
+            "content-type": "application/json", "x-api-key": api_key, "anthropic-version": "2023-06-01"})
         try:
-            with urllib.request.urlopen(req, timeout=60) as r:
+            with urllib.request.urlopen(req, timeout=120) as r:
                 resp = json.load(r)
             break
         except urllib.error.HTTPError as e:
-            if e.code in (429, 500, 529) and attempt < 2:
+            msg = e.read().decode("utf-8", "ignore")
+            if e.code == 400 and "tool_choice" in msg and body["tool_choice"]["type"] == "tool":
+                body["tool_choice"] = {"type": "auto"}          # 這個模型不支援強制呼叫，改成 auto 再試
+                NO_FORCED_TOOL.add(model)
+                continue
+            if e.code in (429, 500, 529) and attempt < 3:
                 time.sleep(2 ** attempt * 2)
                 continue
-            raise SystemExit(f"API 錯誤 {e.code}：{e.read().decode('utf-8', 'ignore')[:300]}")
-    tool = next(b for b in resp["content"] if b["type"] == "tool_use")
-    return tool["input"], resp.get("usage", {})
+            raise RuntimeError(f"API 錯誤 {e.code}：{msg[:300]}")
+        except (urllib.error.URLError, TimeoutError, OSError) as e:   # 連線逾時、網路中斷
+            if attempt < 3:
+                time.sleep(2 ** attempt * 2)
+                continue
+            raise RuntimeError(f"連線失敗：{e}")
+    if resp is None:
+        raise RuntimeError("API 沒有回應")
+    tool = next((b for b in resp["content"] if b["type"] == "tool_use"), None)
+    if tool:
+        return tool["input"], resp.get("usage", {})
+    text = "".join(b.get("text", "") for b in resp["content"] if b["type"] == "text")
+    m = re.search(r"\{.*\}", text, flags=re.S)
+    try:
+        parsed = json.loads(m.group(0)) if m else None
+    except json.JSONDecodeError:
+        parsed = None
+    return parsed, resp.get("usage", {})
 
 
 # ---------- 4. 驗證 ----------
