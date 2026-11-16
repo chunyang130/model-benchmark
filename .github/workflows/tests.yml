@@ -1,0 +1,27 @@
+name: tests
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: 示範模式（不呼叫任何模型）
+        run: python bench.py --provider mock
+      - name: 檢查評估流程
+        run: |
+          python - <<'PY'
+          import json
+          s = json.load(open("results/mock__mock.json", encoding="utf-8"))["summary"]
+          print(s)
+          assert s["應答題答對"] == 14 and s["拒答正確"] == 3
+          assert s["使用簡體字"] == 0   # 繁體答案不可被誤判為簡體
+          PY
