@@ -1,0 +1,150 @@
+[
+ {
+  "id": "q01",
+  "question": "多益衝刺班一期多少錢？",
+  "expected_chunk": "pricing#1",
+  "keywords_any": [
+   "18,000",
+   "18000"
+  ]
+ },
+ {
+  "id": "q02",
+  "question": "開課後兩週想退費可以退多少？",
+  "expected_chunk": "refund#2",
+  "keywords_any": [
+   "50%",
+   "一半"
+  ]
+ },
+ {
+  "id": "q03",
+  "question": "雲端課程可以看多久？",
+  "expected_chunk": "class_modes#3",
+  "keywords_any": [
+   "6 個月",
+   "6個月",
+   "六個月"
+  ]
+ },
+ {
+  "id": "q04",
+  "question": "程度檢測要收費嗎？",
+  "expected_chunk": "placement_test#1",
+  "keywords_any": [
+   "免費",
+   "免费"
+  ]
+ },
+ {
+  "id": "q05",
+  "question": "週日可以去做程度檢測嗎？",
+  "expected_chunk": "placement_test#2",
+  "keywords_any": [
+   "不提供",
+   "不開放",
+   "沒有提供",
+   "無法",
+   "不能",
+   "没有提供"
+  ]
+ },
+ {
+  "id": "q06",
+  "question": "雅思考到 7.0 有獎學金嗎？金額多少？",
+  "expected_chunk": "scholarship#1",
+  "keywords_any": [
+   "3,000",
+   "3000"
+  ]
+ },
+ {
+  "id": "q07",
+  "question": "舊生續報有折扣嗎？",
+  "expected_chunk": "pricing#2",
+  "keywords_any": [
+   "9 折",
+   "9折",
+   "九折"
+  ]
+ },
+ {
+  "id": "q08",
+  "question": "南區分校週日有開嗎？",
+  "expected_chunk": "branches#2",
+  "keywords_any": [
+   "公休"
+  ]
+ },
+ {
+  "id": "q09",
+  "question": "雅思保證班沒考到目標分數怎麼辦？",
+  "expected_chunk": "scholarship#2",
+  "keywords_any": [
+   "重上"
+  ]
+ },
+ {
+  "id": "q10",
+  "question": "教材費要另外付嗎？",
+  "expected_chunk": "faq#2",
+  "keywords_any": [
+   "包含",
+   "不另外"
+  ]
+ },
+ {
+  "id": "q11",
+  "question": "可以分期付款嗎？",
+  "expected_chunk": "pricing#3",
+  "keywords_any": [
+   "3 期",
+   "3期",
+   "6 期",
+   "6期",
+   "零利率"
+  ]
+ },
+ {
+  "id": "q12",
+  "question": "要出國半年，課程可以先停嗎？",
+  "expected_chunk": "faq#3",
+  "keywords_any": [
+   "保留"
+  ]
+ },
+ {
+  "id": "q13",
+  "question": "托福班適合什麼程度的人？",
+  "expected_chunk": "courses#3",
+  "keywords_any": [
+   "4.5"
+  ]
+ },
+ {
+  "id": "q14",
+  "question": "錯過一堂課怎麼補？",
+  "expected_chunk": "class_modes#1",
+  "keywords_any": [
+   "錄影",
+   "录影",
+   "錄像",
+   "录像"
+  ]
+ },
+ {
+  "id": "q15",
+  "question": "有沒有日文課？",
+  "note": "知識庫沒有答案，必須拒答"
+ },
+ {
+  "id": "q16",
+  "question": "老師都有什麼證照？",
+  "note": "知識庫沒有答案，必須拒答"
+ },
+ {
+  "id": "q17",
+  "question": "分校有停車位嗎？",
+  "note": "知識庫沒有答案，必須拒答"
+ }
+]
