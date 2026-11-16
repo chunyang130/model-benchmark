@@ -217,11 +217,35 @@ def run(provider, model):
 
 
 # ---------- 彙整比較表 ----------
+def rescore(rows):
+    """用目前的 questions.json 重新評分（評分規則修正後，不必重新呼叫模型）。"""
+    qs = {q["id"]: q for q in json.load(open(os.path.join(HERE, "eval", "questions.json"), encoding="utf-8"))}
+    for r in rows:
+        q = qs[r["id"]]
+        if q.get("expected_chunk"):
+            r["correct"] = bool(r["answerable"]) and any(k in r["answer"] for k in q["keywords_any"]) and not r["errors"]
+        else:
+            r["correct"] = not r["answerable"]
+    return rows
+
+
 def report():
     files = sorted(glob.glob(os.path.join(RESULTS, "*.json")))
-    rows = [json.load(open(f, encoding="utf-8"))["summary"] for f in files]
-    rows = [r for r in rows if r["provider"] != "mock"] or rows
-    head = "| 模型 | 應答題答對 | 拒答正確 | 重試 | 首次格式錯誤 | 簡體字 | 每題秒數（中位數） | 每千題費用（美元） |\n|---|---|---|---|---|---|---|---|"
+    data = [json.load(open(f, encoding="utf-8")) for f in files]
+    data = [d for d in data if d["summary"]["provider"] != "mock"] or data
+    rows = []
+    for d in data:
+        s, rs = dict(d["summary"]), rescore(d["results"])
+        s["應答題答對"] = sum(r["correct"] for r in rs if r["type"] == "應答")
+        s["拒答正確"] = sum(r["correct"] for r in rs if r["type"] == "拒答")
+        price = PRICES.get(s["model"])
+        if price and s.get("費用美元") is None:      # 價格表後來才補上的模型，用實際 token 補算
+            called = sum(1 for r in rs if r.get("called_model"))
+            s["費用美元"] = round((s["輸入token"] * price[0] + s["輸出token"] * price[1]) / 1e6, 5)
+            s["每千題費用美元"] = round(s["費用美元"] / called * 1000, 3)
+        rows.append(s)
+    head = ("| 模型 | 應答題答對 | 拒答正確 | 重試 | 首次格式錯誤 | 簡體字 | 每題秒數（中位數） | 每千題費用（美元） |\n"
+            "|---|---|---|---|---|---|---|---|")
     lines = [head]
     for r in sorted(rows, key=lambda r: (-(r["應答題答對"] + r["拒答正確"]), r["每千題費用美元"] or 0)):
         fee = "免 API 費用（自備運算資源）" if r["provider"] == "ollama" else (f"{r['每千題費用美元']:.3f}" if r["每千題費用美元"] is not None else "—")
